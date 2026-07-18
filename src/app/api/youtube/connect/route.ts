@@ -1,29 +1,31 @@
 import { NextResponse } from "next/server";
-import { getYoutubeAuthUrl, getYoutubeConnectionStatus } from "@/lib/youtube";
-import { getSetting } from "@/lib/settings";
+import { getYoutubeAuthUrl, getYoutubeConnectionStatus, getYoutubeRedirectUri } from "@/lib/youtube";
+import { setSetting } from "@/lib/settings";
 
 export async function GET(req: Request) {
+  const origin = new URL(req.url).origin;
   try {
-    // Garante APP_URL a partir do host atual se estiver vazio
-    const current = await getSetting("APP_URL");
-    if (!current) {
-      const origin = new URL(req.url).origin;
-      const { setSetting } = await import("@/lib/settings");
-      await setSetting("APP_URL", origin);
-    }
-    const url = await getYoutubeAuthUrl();
-    return NextResponse.redirect(url);
+    // Sempre alinha APP_URL ao domínio real (evita localhost antigo)
+    await setSetting("APP_URL", origin);
+    const redirectUri = await getYoutubeRedirectUri(origin);
+    const url = await getYoutubeAuthUrl("content-studio", origin);
+    // Se algo falhar no Google, o usuário vê o redirect esperado na query
+    const res = NextResponse.redirect(url);
+    res.headers.set("x-youtube-redirect-uri", redirectUri);
+    return res;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro OAuth";
-    const origin = new URL(req.url).origin;
+    const redirectUri = await getYoutubeRedirectUri(origin).catch(() => `${origin}/api/youtube/callback`);
     return NextResponse.redirect(
-      `${origin}/settings?youtube_error=${encodeURIComponent(msg)}`
+      `${origin}/settings?youtube_error=${encodeURIComponent(`${msg} | Use no Google: ${redirectUri}`)}`
     );
   }
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    const origin = new URL(req.url).origin;
+    await setSetting("APP_URL", origin);
     const status = await getYoutubeConnectionStatus();
     if (!status.hasClient) {
       return NextResponse.json(
@@ -31,8 +33,9 @@ export async function POST() {
         { status: 400 }
       );
     }
-    const url = await getYoutubeAuthUrl();
-    return NextResponse.json({ url });
+    const redirectUri = await getYoutubeRedirectUri(origin);
+    const url = await getYoutubeAuthUrl("content-studio", origin);
+    return NextResponse.json({ url, redirectUri });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro" },

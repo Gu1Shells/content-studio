@@ -331,12 +331,19 @@ function SettingsInner() {
               Conectar canal
             </h3>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              Redirect URI:{" "}
-              <code className="rounded bg-[#f7f3ea] px-1">
+              No Google Cloud → Credenciais → seu OAuth Client (tipo <strong>Aplicativo da Web</strong>),
+              adicione exatamente esta URI e salve:
+            </p>
+            <p className="mt-2">
+              <code className="block break-all rounded-xl bg-[#f7f3ea] px-3 py-2 text-sm">
                 {typeof window !== "undefined"
                   ? `${window.location.origin}/api/youtube/callback`
                   : "https://studio.neonux.com.br/api/youtube/callback"}
               </code>
+            </p>
+            <p className="mt-2 text-xs text-[var(--muted)]">
+              Também ative a API <strong>YouTube Data API v3</strong>. Remova URIs antigas de
+              localhost:3000 se não for mais usar.
             </p>
             <p className="mt-2 text-sm">
               Status:{" "}

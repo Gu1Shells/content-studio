@@ -1,23 +1,20 @@
 import { NextResponse } from "next/server";
 import { exchangeYoutubeCode } from "@/lib/youtube";
-import { getSetting, setSetting } from "@/lib/settings";
+import { setSetting } from "@/lib/settings";
 
 export async function GET(req: Request) {
   const origin = new URL(req.url).origin;
-  const savedAppUrl = await getSetting("APP_URL");
-  const appUrl = (savedAppUrl || origin).replace(/\/$/, "");
-  // Mantém APP_URL alinhado ao host real do callback
-  if (!savedAppUrl || savedAppUrl !== origin) {
-    await setSetting("APP_URL", origin).catch(() => null);
-  }
+  await setSetting("APP_URL", origin).catch(() => null);
+  const appUrl = origin;
 
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
   const error = searchParams.get("error");
+  const errorDesc = searchParams.get("error_description");
 
   if (error) {
     return NextResponse.redirect(
-      `${appUrl}/settings?youtube_error=${encodeURIComponent(error)}`
+      `${appUrl}/settings?youtube_error=${encodeURIComponent(errorDesc || error)}`
     );
   }
   if (!code) {
@@ -25,7 +22,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const result = await exchangeYoutubeCode(code);
+    const result = await exchangeYoutubeCode(code, origin);
     const q = new URLSearchParams({
       youtube_ok: "1",
       channel: result.channelTitle || result.channelId || "ok",

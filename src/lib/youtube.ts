@@ -7,30 +7,41 @@ const SCOPES = [
   "https://www.googleapis.com/auth/youtube.readonly",
 ];
 
-export async function getYoutubeOAuthClient() {
-  const clientId = await getSetting("YOUTUBE_CLIENT_ID");
-  const clientSecret = await getSetting("YOUTUBE_CLIENT_SECRET");
-  const appUrl = (await getSetting("APP_URL")) || "http://localhost:3000";
+export async function getYoutubeRedirectUri(originOverride?: string) {
+  const appUrl = (
+    originOverride ||
+    (await getSetting("APP_URL")) ||
+    "https://studio.neonux.com.br"
+  ).replace(/\/$/, "");
+  return `${appUrl}/api/youtube/callback`;
+}
+
+export async function getYoutubeOAuthClient(originOverride?: string) {
+  const clientId = (await getSetting("YOUTUBE_CLIENT_ID")).trim();
+  const clientSecret = (await getSetting("YOUTUBE_CLIENT_SECRET")).trim();
 
   if (!clientId || !clientSecret) {
     throw new Error("Configure YOUTUBE_CLIENT_ID e YOUTUBE_CLIENT_SECRET em /settings");
   }
 
-  return new google.auth.OAuth2(clientId, clientSecret, `${appUrl.replace(/\/$/, "")}/api/youtube/callback`);
+  const redirectUri = await getYoutubeRedirectUri(originOverride);
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
 
-export async function getYoutubeAuthUrl(state?: string) {
-  const oauth2 = await getYoutubeOAuthClient();
+export async function getYoutubeAuthUrl(state?: string, originOverride?: string) {
+  const oauth2 = await getYoutubeOAuthClient(originOverride);
+  const redirectUri = await getYoutubeRedirectUri(originOverride);
   return oauth2.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: SCOPES,
     state: state || "content-studio",
+    redirect_uri: redirectUri,
   });
 }
 
-export async function exchangeYoutubeCode(code: string) {
-  const oauth2 = await getYoutubeOAuthClient();
+export async function exchangeYoutubeCode(code: string, originOverride?: string) {
+  const oauth2 = await getYoutubeOAuthClient(originOverride);
   const { tokens } = await oauth2.getToken(code);
   if (!tokens.refresh_token && !tokens.access_token) {
     throw new Error("Google não retornou tokens. Revogue o acesso do app e tente de novo.");

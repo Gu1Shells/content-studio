@@ -10,7 +10,7 @@
 2. **+ Service** → **App**
 3. Source: **GitHub** → `Gu1Shells/content-studio` (branch `master`)
 4. Build: **Dockerfile** (arquivo `Dockerfile` na raiz)
-5. Port: **3000**
+5. Port: **3001** (não use 3000 — o EasyPanel já usa)
 
 ## 3) Volumes (persistência)
 Monte estes caminhos no serviço:
@@ -26,7 +26,7 @@ Obrigatórias no EasyPanel:
 ```
 DATABASE_URL=file:/app/data/prod.db
 APP_URL=https://SEU-DOMINIO.com
-PORT=3000
+PORT=3001
 HOSTNAME=0.0.0.0
 MONTHLY_BUDGET_USD=50
 MOCK_PIPELINE=false

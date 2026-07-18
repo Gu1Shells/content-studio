@@ -3,7 +3,7 @@ services:
   content-studio:
     build: .
     ports:
-      - "3000:3000"
+      - "3001:3001"
     environment:
       DATABASE_URL: file:/app/data/prod.db
       APP_URL: https://SEU-DOMINIO.com

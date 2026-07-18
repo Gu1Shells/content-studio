@@ -50,10 +50,9 @@ export async function renderVideo(
     };
   }
 
-  // Slideshow simples: primeira imagem estendida + áudio opcional
   const listFile = path.join(dir, "images.txt");
-  const perImage = Math.max(input.durationSec / input.imageUrls.length, 3);
-  // Baixa primeiras N imagens localmente
+  const perImage = Math.max(input.durationSec / Math.min(input.imageUrls.length, 12), 3);
+
   const localImages: string[] = [];
   for (let i = 0; i < Math.min(input.imageUrls.length, 12); i++) {
     const url = input.imageUrls[i];
@@ -78,10 +77,19 @@ export async function renderVideo(
     };
   }
 
-  const concat = localImages
-    .map((p) => `file '${p.replace(/\\/g, "/")}'\nduration ${perImage}`)
-    .join("\n");
-  await fs.writeFile(listFile, `${concat}\nfile '${localImages[localImages.length - 1].replace(/\\/g, "/")}'\n`);
+  // Concat demuxer: caminhos absolutos escapados (sem shell)
+  const lines: string[] = [];
+  for (const img of localImages) {
+    lines.push(`file ${ffmpegConcatPath(img)}`);
+    lines.push(`duration ${perImage}`);
+  }
+  lines.push(`file ${ffmpegConcatPath(localImages[localImages.length - 1])}`);
+  await fs.writeFile(listFile, `${lines.join("\n")}\n`);
+
+  // Evitar parênteses no filter quando possível — mas com shell:false os () do pad são ok.
+  // Usamos scale+pad clássico como um único argumento argv.
+  const vf =
+    "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black";
 
   const args = [
     "-y",
@@ -93,13 +101,15 @@ export async function renderVideo(
     listFile,
     ...(input.audioPath && input.audioPath.endsWith(".mp3")
       ? ["-i", input.audioPath, "-c:a", "aac", "-shortest"]
-      : ["-t", String(input.durationSec)]),
+      : ["-t", String(Math.max(input.durationSec, perImage * localImages.length))]),
     "-vf",
-    "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",
+    vf,
     "-c:v",
     "libx264",
     "-pix_fmt",
     "yuv420p",
+    "-movflags",
+    "+faststart",
     outMp4,
   ];
 
@@ -113,9 +123,15 @@ export async function renderVideo(
   };
 }
 
+/** Path seguro para o demuxer concat do FFmpeg. */
+function ffmpegConcatPath(p: string): string {
+  const normalized = p.replace(/\\/g, "/").replace(/'/g, "'\\''");
+  return `'${normalized}'`;
+}
+
 function commandExists(cmd: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, ["-version"], { stdio: "ignore", shell: true });
+    const child = spawn(cmd, ["-version"], { stdio: "ignore", shell: false });
     child.on("error", () => resolve(false));
     child.on("close", (code) => resolve(code === 0));
   });
@@ -123,7 +139,8 @@ function commandExists(cmd: string): Promise<boolean> {
 
 function run(cmd: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: "pipe", shell: true });
+    // shell:false — senão /bin/sh interpreta "(" no -vf e quebra
+    const child = spawn(cmd, args, { stdio: "pipe", shell: false });
     let err = "";
     child.stderr.on("data", (d) => {
       err += d.toString();
@@ -131,7 +148,7 @@ function run(cmd: string, args: string[]): Promise<void> {
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exit ${code}: ${err.slice(-400)}`));
+      else reject(new Error(`ffmpeg exit ${code}: ${err.slice(-500)}`));
     });
   });
 }

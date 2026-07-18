@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { buildSuggestion } from "@/lib/pipeline/suggest";
-import { searchMedia } from "@/lib/pipeline/media";
+import { searchMedia, extractTopicQuery, buildImageSearchQuery, IP_RISK } from "@/lib/pipeline/media";
 import { generateVoiceover } from "@/lib/pipeline/tts";
 import { generateCaptions } from "@/lib/pipeline/captions";
 import { renderVideo, type SceneClip } from "@/lib/pipeline/ffmpeg-render";
@@ -114,31 +114,40 @@ export async function approveAndGenerate(videoId: string) {
 
   try {
     await runJob(videoId, "images", async (update) => {
+      const topic = extractTopicQuery(video.prompt);
+      const preferWeb = IP_RISK.test(video.prompt) || IP_RISK.test(topic);
       let i = 0;
       for (const section of script) {
-        const preferVideo = /lugar|place|world|viagem|travel|natureza|nature/i.test(
-          section.visualQuery
-        );
-        let hits = await searchMedia(section.visualQuery, {
-          video: preferVideo,
+        const imageQuery = buildImageSearchQuery(topic, section);
+        let hits = await searchMedia(imageQuery, {
+          video: false,
           allowWeb: true,
+          preferWeb,
         });
-        if (!hits.length) {
-          hits = await searchMedia(section.visualQuery, { video: false, allowWeb: true });
+        // Fallback: só o tema (ex.: "GTA 6")
+        if (!hits.length || hits[0].source === "demo" || hits[0].source === "pexels" && preferWeb) {
+          const webHits = await searchMedia(topic, { allowWeb: true, preferWeb: true });
+          if (webHits.length && webHits[0].source === "serper") {
+            hits = webHits;
+          } else if (!hits.length) {
+            hits = webHits;
+          }
         }
-        // Fallback: query do título da seção / item
-        if (!hits.length && section.title) {
-          hits = await searchMedia(section.title, { allowWeb: true });
+        if ((!hits.length || hits[0].source === "demo") && section.title) {
+          hits = await searchMedia(`${topic} ${section.title}`, {
+            allowWeb: true,
+            preferWeb: true,
+          });
         }
         const hit = hits[0];
         if (hit) {
-          if (hit.copyrightRisk) copyrightWarnings++;
+          if (hit.copyrightRisk || preferWeb) copyrightWarnings++;
           scenes.push({ section, imageUrl: hit.url });
           await prisma.asset.create({
             data: {
               videoId,
               type: hit.type === "video" ? "video" : "image",
-              label: `${section.id}:${section.visualQuery}`,
+              label: `${section.id}:${imageQuery}`,
               source: hit.source,
               url: hit.url,
               metaJson: JSON.stringify({
@@ -146,14 +155,22 @@ export async function approveAndGenerate(videoId: string) {
                 sectionId: section.id,
                 sectionRole: section.role,
                 durationSec: section.durationSec,
+                imageQuery,
+                topic,
               }),
             },
           });
         }
         i++;
-        await update(Math.round((i / script.length) * 100), section.title);
+        await update(Math.round((i / script.length) * 100), `${section.title} · ${imageQuery}`);
       }
-      if (!scenes.length) throw new Error("Nenhuma imagem encontrada para as cenas");
+      if (!scenes.length) {
+        throw new Error(
+          preferWeb
+            ? "Nenhuma imagem encontrada. Configure SERPER_API_KEY em /settings para buscar no Google Images."
+            : "Nenhuma imagem encontrada para as cenas"
+        );
+      }
     });
 
     await runJob(videoId, "tts", async (update) => {

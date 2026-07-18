@@ -29,6 +29,7 @@ ENV DATABASE_URL="file:/app/data/prod.db"
 # FFmpeg para render + OpenSSL para Prisma
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl ca-certificates ffmpeg \
+    fonts-dejavu-core fonts-liberation \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/public ./public

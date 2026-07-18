@@ -3,7 +3,7 @@ import { buildSuggestion } from "@/lib/pipeline/suggest";
 import { searchMedia } from "@/lib/pipeline/media";
 import { generateVoiceover } from "@/lib/pipeline/tts";
 import { generateCaptions } from "@/lib/pipeline/captions";
-import { renderVideo } from "@/lib/pipeline/ffmpeg-render";
+import { renderVideo, type SceneClip } from "@/lib/pipeline/ffmpeg-render";
 import { getSetting } from "@/lib/settings";
 import type { ScriptSection, SuggestionPayload, VideoFormat } from "@/lib/types";
 
@@ -93,7 +93,7 @@ async function runJob(
   }
 }
 
-/** Aprova e dispara: imagens → TTS → legendas → render. */
+/** Aprova e dispara: imagens (1 por cena) → TTS → legendas → render sync + thumb. */
 export async function approveAndGenerate(videoId: string) {
   const video = await prisma.video.findUniqueOrThrow({ where: { id: videoId } });
   if (!["estimated", "draft", "paused"].includes(video.status)) {
@@ -106,35 +106,54 @@ export async function approveAndGenerate(videoId: string) {
   });
 
   const script = JSON.parse(video.scriptJson || "[]") as ScriptSection[];
-  const imageUrls: string[] = [];
+  const scenes: SceneClip[] = [];
   let audioPath: string | null = null;
   let srtPath: string | null = null;
+  let assPath: string | null = null;
+  let copyrightWarnings = 0;
 
   try {
     await runJob(videoId, "images", async (update) => {
-      const queries = script.map((s) => s.visualQuery).slice(0, 14);
       let i = 0;
-      for (const query of queries) {
-        const preferVideo = /lugar|place|world|viagem|travel|natureza|nature/i.test(query);
-        let hits = await searchMedia(query, { video: preferVideo });
-        if (!hits.length) hits = await searchMedia(query, { video: false });
+      for (const section of script) {
+        const preferVideo = /lugar|place|world|viagem|travel|natureza|nature/i.test(
+          section.visualQuery
+        );
+        let hits = await searchMedia(section.visualQuery, {
+          video: preferVideo,
+          allowWeb: true,
+        });
+        if (!hits.length) {
+          hits = await searchMedia(section.visualQuery, { video: false, allowWeb: true });
+        }
+        // Fallback: query do título da seção / item
+        if (!hits.length && section.title) {
+          hits = await searchMedia(section.title, { allowWeb: true });
+        }
         const hit = hits[0];
         if (hit) {
-          imageUrls.push(hit.url);
+          if (hit.copyrightRisk) copyrightWarnings++;
+          scenes.push({ section, imageUrl: hit.url });
           await prisma.asset.create({
             data: {
               videoId,
               type: hit.type === "video" ? "video" : "image",
-              label: query,
+              label: `${section.id}:${section.visualQuery}`,
               source: hit.source,
               url: hit.url,
-              metaJson: JSON.stringify(hit),
+              metaJson: JSON.stringify({
+                ...hit,
+                sectionId: section.id,
+                sectionRole: section.role,
+                durationSec: section.durationSec,
+              }),
             },
           });
         }
         i++;
-        await update(Math.round((i / queries.length) * 100));
+        await update(Math.round((i / script.length) * 100), section.title);
       }
+      if (!scenes.length) throw new Error("Nenhuma imagem encontrada para as cenas");
     });
 
     await runJob(videoId, "tts", async (update) => {
@@ -163,26 +182,32 @@ export async function approveAndGenerate(videoId: string) {
       await update(30);
       const caps = await generateCaptions(videoId, script);
       srtPath = caps.srtPath;
+      assPath = caps.assPath;
       await prisma.asset.create({
         data: {
           videoId,
           type: "caption",
-          label: "captions.srt",
+          label: "captions.ass",
           source: "local",
-          url: caps.srtUrl,
-          localPath: caps.srtPath,
-          metaJson: JSON.stringify({ cues: caps.cues.length, jsonUrl: caps.url }),
+          url: caps.assUrl,
+          localPath: caps.assPath,
+          metaJson: JSON.stringify({
+            cues: caps.cues.length,
+            srtUrl: caps.srtUrl,
+            style: "DejaVu Sans bold bottom",
+          }),
         },
       });
       await update(100);
     });
 
     await runJob(videoId, "render", async (update) => {
-      await update(10, "Montando vídeo...");
+      await update(10, "Montando vídeo sincronizado...");
       const rendered = await renderVideo(videoId, {
         title: video.title || "video",
-        imageUrls,
+        scenes,
         audioPath,
+        assPath,
         srtPath,
         durationSec: video.durationSec || script.reduce((a, s) => a + s.durationSec, 0),
       });
@@ -194,10 +219,30 @@ export async function approveAndGenerate(videoId: string) {
           source: rendered.provider,
           url: rendered.url,
           localPath: rendered.localPath,
-          metaJson: JSON.stringify({ note: rendered.note }),
+          metaJson: JSON.stringify({
+            note: rendered.note,
+            copyrightWarnings,
+          }),
         },
       });
-      await update(100, rendered.note);
+      if (rendered.thumbnailPath && rendered.thumbnailUrl) {
+        await prisma.asset.create({
+          data: {
+            videoId,
+            type: "thumbnail",
+            label: "thumbnail.jpg",
+            source: "ffmpeg",
+            url: rendered.thumbnailUrl,
+            localPath: rendered.thumbnailPath,
+            metaJson: JSON.stringify({ title: video.title }),
+          },
+        });
+      }
+      const warn =
+        copyrightWarnings > 0
+          ? ` · ${copyrightWarnings} cena(s) com possível risco de copyright (web/IP)`
+          : "";
+      await update(100, `${rendered.note}${warn}`);
     });
 
     const estimate = video.estimateJson ? JSON.parse(video.estimateJson) : null;
@@ -242,6 +287,10 @@ export async function approveAndGenerate(videoId: string) {
       data: {
         status: "ready",
         actualCostUsd: actual._sum.totalUsd || 0,
+        errorMessage:
+          copyrightWarnings > 0
+            ? `Aviso: ${copyrightWarnings} imagem(ns) da web/IP — risco de claim no YouTube.`
+            : null,
       },
       include: { assets: true, jobs: true, costEntries: true },
     });

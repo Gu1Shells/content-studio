@@ -4,6 +4,7 @@ export type MediaHit = {
   url: string;
   thumb: string;
   photographer?: string;
-  source: "pexels" | "demo";
+  source: "pexels" | "unsplash" | "serper" | "wikimedia" | "demo";
   query: string;
+  copyrightRisk?: boolean;
 };

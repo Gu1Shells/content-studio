@@ -326,6 +326,17 @@ export default function VideoDetailPage() {
           <h3 className="text-lg font-semibold" style={{ fontFamily: "var(--font-display), serif" }}>
             Assets gerados ({video.assets.length})
           </h3>
+          {video.assets.some((a) => a.type === "thumbnail" && a.url) && (
+            <div className="mb-4 overflow-hidden rounded-2xl border border-[var(--line)] bg-black">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={video.assets.find((a) => a.type === "thumbnail")!.url!}
+                alt="Thumbnail"
+                className="mx-auto max-h-72 w-full object-contain"
+              />
+              <p className="bg-white px-3 py-2 text-sm text-[var(--muted)]">Thumbnail do YouTube</p>
+            </div>
+          )}
           <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
             {video.assets.map((a) => (
               <div key={a.id} className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white">

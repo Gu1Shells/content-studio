@@ -47,22 +47,30 @@ export const SETTING_GROUPS: SettingGroup[] = [
   },
   {
     id: "media",
-    title: "Imagens & vídeo stock",
-    description: "Mídia royalty-free. Não use scrape do Google.",
+    title: "Imagens & vídeo",
+    description:
+      "Cascata: Pexels → Unsplash → Wikimedia → Google Images (Serper). Temas com IP (ex.: GTA) têm risco de claim.",
     fields: [
       {
         key: "PEXELS_API_KEY",
         label: "Pexels API Key",
         secret: true,
-        help: "Grátis — imagens e vídeos",
+        help: "Grátis — stock royalty-free",
         helpUrl: "https://www.pexels.com/api/",
       },
       {
         key: "UNSPLASH_ACCESS_KEY",
         label: "Unsplash Access Key",
         secret: true,
-        help: "Fallback de imagens (opcional)",
+        help: "Fallback stock",
         helpUrl: "https://unsplash.com/developers",
+      },
+      {
+        key: "SERPER_API_KEY",
+        label: "Serper API Key (Google Images)",
+        secret: true,
+        help: "Busca imagens do Google via API. Amplia cobertura (jogos, marcas), mas pode gerar claim.",
+        helpUrl: "https://serper.dev/",
       },
     ],
   },

@@ -1,0 +1,24 @@
+# Referência local / EasyPanel (App Service + Dockerfile)
+services:
+  content-studio:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: file:/app/data/prod.db
+      APP_URL: https://SEU-DOMINIO.com
+      MONTHLY_BUDGET_USD: "50"
+      MOCK_PIPELINE: "false"
+      # OPENAI_API_KEY:
+      # PEXELS_API_KEY:
+      # ELEVENLABS_API_KEY:
+      # YOUTUBE_CLIENT_ID:
+      # YOUTUBE_CLIENT_SECRET:
+    volumes:
+      - content_data:/app/data
+      - content_storage:/app/storage
+    restart: unless-stopped
+
+volumes:
+  content_data:
+  content_storage:

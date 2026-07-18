@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+storage
+prisma/*.db
+prisma/*.db-journal
+npm-debug.log*
+README.md
+docs
+AGENTS.md
+CLAUDE.md
+*.md
+!docker/**

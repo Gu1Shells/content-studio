@@ -11,7 +11,12 @@ const SCOPES = ["user.info.basic", "video.upload"].join(",");
 
 async function getAppUrl() {
   const appUrl = (await getSetting("APP_URL")) || "https://studio.neonux.com.br";
-  return appUrl.replace(/\/$/, "");
+  const cleaned = appUrl.replace(/\/$/, "");
+  // Nunca use bind interno do Docker como redirect
+  if (/0\.0\.0\.0|127\.0\.0\.1/.test(cleaned)) {
+    return "https://studio.neonux.com.br";
+  }
+  return cleaned;
 }
 
 export async function getTikTokRedirectUri() {

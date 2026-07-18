@@ -1,27 +1,28 @@
 import { NextResponse } from "next/server";
 import { getTikTokAuthUrl, getTikTokConnectionStatus } from "@/lib/tiktok";
-import { getSetting, setSetting } from "@/lib/settings";
+import { resolvePublicOrigin } from "@/lib/public-origin";
+import { setSetting } from "@/lib/settings";
 
 export async function GET(req: Request) {
   try {
-    const origin = new URL(req.url).origin;
-    const current = await getSetting("APP_URL");
-    if (!current) {
-      await setSetting("APP_URL", origin);
-    }
+    const origin = await resolvePublicOrigin(req);
+    await setSetting("APP_URL", origin);
     const url = await getTikTokAuthUrl();
+    // getTikTokAuthUrl usa APP_URL das settings — já atualizado acima
     return NextResponse.redirect(url);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro OAuth TikTok";
-    const origin = new URL(req.url).origin;
+    const origin = await resolvePublicOrigin(req).catch(() => "https://studio.neonux.com.br");
     return NextResponse.redirect(
       `${origin}/settings?tiktok_error=${encodeURIComponent(msg)}`
     );
   }
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    const origin = await resolvePublicOrigin(req);
+    await setSetting("APP_URL", origin);
     const status = await getTikTokConnectionStatus();
     if (!status.hasClient) {
       return NextResponse.json(
@@ -30,7 +31,7 @@ export async function POST() {
       );
     }
     const url = await getTikTokAuthUrl();
-    return NextResponse.json({ url });
+    return NextResponse.json({ url, origin });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro" },

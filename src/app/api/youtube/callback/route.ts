@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { exchangeYoutubeCode } from "@/lib/youtube";
+import { resolvePublicOrigin } from "@/lib/public-origin";
 import { setSetting } from "@/lib/settings";
 
 export async function GET(req: Request) {
-  const origin = new URL(req.url).origin;
+  const origin = await resolvePublicOrigin(req);
   await setSetting("APP_URL", origin).catch(() => null);
-  const appUrl = origin;
 
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
@@ -14,11 +14,11 @@ export async function GET(req: Request) {
 
   if (error) {
     return NextResponse.redirect(
-      `${appUrl}/settings?youtube_error=${encodeURIComponent(errorDesc || error)}`
+      `${origin}/settings?youtube_error=${encodeURIComponent(errorDesc || error)}`
     );
   }
   if (!code) {
-    return NextResponse.redirect(`${appUrl}/settings?youtube_error=missing_code`);
+    return NextResponse.redirect(`${origin}/settings?youtube_error=missing_code`);
   }
 
   try {
@@ -27,11 +27,11 @@ export async function GET(req: Request) {
       youtube_ok: "1",
       channel: result.channelTitle || result.channelId || "ok",
     });
-    return NextResponse.redirect(`${appUrl}/settings?${q.toString()}`);
+    return NextResponse.redirect(`${origin}/settings?${q.toString()}`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "callback_failed";
     return NextResponse.redirect(
-      `${appUrl}/settings?youtube_error=${encodeURIComponent(msg.slice(0, 300))}`
+      `${origin}/settings?youtube_error=${encodeURIComponent(msg.slice(0, 300))}`
     );
   }
 }

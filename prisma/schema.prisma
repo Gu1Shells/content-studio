@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Channel {
+  id           String   @id @default(cuid())
+  name         String
+  platform     String   // youtube | youtube_shorts | tiktok
+  externalId   String?
+  connected    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  videos       Video[]
+}
+
+model Video {
+  id              String   @id @default(cuid())
+  title           String?
+  prompt          String
+  niche           String   @default("curiosidades")
+  format          String   @default("long") // long | shorts | both
+  status          String   @default("draft")
+  // draft | estimating | estimated | approved | generating | ready | scheduled | published | paused | failed | cancelled
+  suggestionJson  String?  // JSON: plan, outline, hooks, CTAs
+  scriptJson      String?  // JSON: sections with narration
+  estimateJson    String?  // JSON: cost breakdown
+  estimatedCostUsd Float   @default(0)
+  actualCostUsd   Float    @default(0)
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  youtubeUrl      String?
+  shortsUrl       String?
+  tiktokUrl       String?
+  errorMessage    String?
+  durationSec     Int?
+  channelId       String?
+  channel         Channel? @relation(fields: [channelId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  assets          Asset[]
+  costEntries     CostEntry[]
+  jobs            Job[]
+}
+
+model Asset {
+  id        String   @id @default(cuid())
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  type      String   // image | audio | caption | video | thumbnail
+  label     String?
+  source    String?  // pexels | unsplash | ai | tts | local
+  url       String?
+  localPath String?
+  metaJson  String?
+  createdAt DateTime @default(now())
+}
+
+model Job {
+  id          String   @id @default(cuid())
+  videoId     String
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  type        String   // estimate | script | images | tts | captions | render | publish
+  status      String   @default("queued") // queued | running | done | failed
+  progress    Int      @default(0)
+  log         String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model CostEntry {
+  id          String   @id @default(cuid())
+  videoId     String?
+  video       Video?   @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  provider    String   // openai | anthropic | elevenlabs | pexels | fal | local
+  kind        String   // tokens | tts_chars | image | render | other
+  units       Float    @default(0)
+  unitCostUsd Float    @default(0)
+  totalUsd    Float    @default(0)
+  note        String?
+  createdAt   DateTime @default(now())
+}
+
+model AppSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}

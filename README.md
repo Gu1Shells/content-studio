@@ -1,36 +1,88 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Content Studio
 
-## Getting Started
+Estúdio interno (depois SaaS) para canal de **curiosidades**: prompt → plano + custo → aprovação → assets → agenda → (futuro) post YouTube/Shorts/TikTok.
 
-First, run the development server:
+## O que já funciona
+
+- Briefing por prompt (ex.: “Top 10 lugares mais bonitos do mundo”)
+- Sugestão com gancho, roteiro (começo/meio/fim), CTAs de like/inscrição
+- Estimativa de custo antes de aprovar
+- Busca de imagens/vídeos via **Pexels** (royalty-free) — **não** Google scrape
+- Histórico, pausar, excluir, cronograma, dashboard de gastos
+- Alerta de risco de copyright (ex.: GTA 6 / IPs de jogos)
+
+## O que vem na sequência
+
+- TTS real (ElevenLabs) + legendas karaoke
+- Render FFmpeg/Remotion na VPS Hostinger
+- OAuth YouTube + upload
+- TikTok posting
+- Multi-tenant + Stripe (revenda)
+
+## Resposta direta: “dá para achar imagens do GTA 6?”
+
+**Tecnicamente** dá para buscar na web. **Para monetizar no YouTube, não é o caminho.**
+Assets oficiais/gameplay de GTA 6 são IP da Rockstar → claim / desmonetização.
+
+No sistema:
+- Lugares, natureza, ciência → Pexels/Unsplash (seguro)
+- Temas com IP (GTA, Disney, etc.) → o plano marca **risco** e a estratégia deve usar arte estilizada / genérica, não scrape de Google com arte oficial
+
+## Setup local
 
 ```bash
+cd content-studio
+cp .env.example .env
+npm install
+npx prisma migrate dev --name init
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abra http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Keys (importante)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Abra **http://localhost:3000/settings** e preencha:
 
-## Learn More
+- **OpenAI** — roteiro real (gpt-4o-mini)
+- **Pexels** (grátis) — imagens/vídeos
+- **ElevenLabs** — voz
+- **YouTube** — Client ID/Secret + botão **Conectar YouTube**
 
-To learn more about Next.js, take a look at the following resources:
+### YouTube OAuth (checklist)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Google Cloud → criar OAuth Client (Web)
+2. Ativar **YouTube Data API v3**
+3. Redirect URI: `http://localhost:3000/api/youtube/callback` (ou seu domínio)
+4. Salvar Client ID/Secret + `APP_URL` em `/settings`
+5. Clicar **Conectar YouTube**
+6. No vídeo `ready` com `final.mp4` → **Enviar ao YouTube (privado)**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Pipeline atual ao aprovar
 
-## Deploy on Vercel
+1. Roteiro (OpenAI se key existir, senão template)
+2. Imagens (Pexels)
+3. TTS (ElevenLabs ou demo texto)
+4. Legendas `.srt`
+5. Render FFmpeg na VPS (ou manifesto se FFmpeg não estiver instalado)
+6. Publicar YouTube (manual no botão)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deploy na VPS Hostinger
+
+1. Node 20+ na VPS
+2. Clone o repo / copie `content-studio`
+3. `npm ci && npx prisma migrate deploy && npm run build`
+4. `npm run start` (ou PM2: `pm2 start npm --name content-studio -- start`)
+5. Nginx/Caddy proxy para a porta 3000
+6. Depois: instalar FFmpeg na VPS para o render
+
+SQLite serve para uso interno single-node. Quando for SaaS multi-user, migre `DATABASE_URL` para Postgres.
+
+## Fluxo do produto
+
+1. Usuário digita o prompt
+2. Sistema devolve título, roteiro, CTAs, queries de mídia e **US$ estimado**
+3. Usuário aprova
+4. Sistema baixa assets (Pexels), registra custos, deixa status `ready`
+5. Agenda / (futuro) publica

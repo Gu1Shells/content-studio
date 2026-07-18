@@ -12,13 +12,21 @@
 4. Build: **Dockerfile** (arquivo `Dockerfile` na raiz)
 5. Port: **3001** (não use 3000 — o EasyPanel já usa)
 
-## 3) Volumes (persistência)
-Monte estes caminhos no serviço:
+## 3) Volumes (OBRIGATÓRIO — senão as keys somem)
 
-| Mount path | Tipo |
-|---|---|
-| `/app/data` | Volume (SQLite) |
-| `/app/storage` | Volume (vídeos/áudios gerados) |
+No EasyPanel, abra o serviço → **Mounts** / **Volumes** → adicione:
+
+| Mount path no container | Tipo | Nome sugerido |
+|---|---|---|
+| `/app/data` | Volume | `createmovie-data` |
+| `/app/storage` | Volume | `createmovie-storage` |
+
+Sem o volume `/app/data`, cada **Deploy** recria o container e o SQLite volta zerado (keys, vídeos, OAuth).
+
+Depois de criar os mounts, faça **Deploy** de novo e só então preencha as keys.
+
+Confira: `https://studio.neonux.com.br/api/health`  
+Deve mostrar `"dataMounted": true`.
 
 ## 4) Variáveis de ambiente
 Obrigatórias no EasyPanel:

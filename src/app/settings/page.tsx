@@ -49,15 +49,22 @@ function SettingsInner() {
   const [messageTone, setMessageTone] = useState<"ok" | "err">("ok");
   const [yt, setYt] = useState<YtStatus | null>(null);
   const [tt, setTt] = useState<TtStatus | null>(null);
+  const [persistWarn, setPersistWarn] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
     try {
-      const [settingsRes, ytRes, ttRes] = await Promise.all([
+      const [settingsRes, ytRes, ttRes, healthRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/youtube/status"),
         fetch("/api/tiktok/status"),
+        fetch("/api/health"),
       ]);
+      if (healthRes.ok) {
+        const health = await healthRes.json();
+        if (health.warning) setPersistWarn(health.warning);
+        else setPersistWarn(null);
+      }
       const data = await settingsRes.json().catch(() => ({ groups: [] }));
       setGroups(data.groups || []);
       const next: Record<string, string> = {};
@@ -308,6 +315,11 @@ function SettingsInner() {
             {saving ? "Salvando..." : "Salvar alterações"}
           </button>
         </div>
+        {persistWarn && (
+          <p className="mt-3 rounded-xl border border-[#e8b4b4] bg-[#fff1f1] px-3 py-2 text-sm text-[var(--danger)]">
+            {persistWarn}
+          </p>
+        )}
         {message && (
           <p
             className={`mt-3 rounded-xl border px-3 py-2 text-sm ${

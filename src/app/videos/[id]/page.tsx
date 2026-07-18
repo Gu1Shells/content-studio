@@ -43,6 +43,7 @@ type VideoDetail = {
   errorMessage: string | null;
   youtubeUrl?: string | null;
   shortsUrl?: string | null;
+  tiktokUrl?: string | null;
   suggestion: Suggestion | null;
   assets: { id: string; type: string; label: string | null; url: string | null; source: string | null }[];
   jobs?: { id: string; type: string; status: string; progress: number; log: string | null }[];
@@ -110,6 +111,22 @@ export default function VideoDetailPage() {
     }
   }
 
+  async function publishTikTok() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/videos/${id}/publish-tiktok`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Falha no upload TikTok");
+      await load();
+      if (data.tiktok?.note) setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!video) return <div className="panel p-8">Carregando...</div>;
   const s = video.suggestion;
 
@@ -147,16 +164,29 @@ export default function VideoDetailPage() {
                   Agendar (amanhã)
                 </button>
                 <button className="btn btn-primary" onClick={() => publish("private")} disabled={busy}>
-                  {busy ? "Publicando..." : "Enviar ao YouTube (privado)"}
+                  {busy ? "Publicando..." : "YouTube (privado)"}
                 </button>
                 <button className="btn btn-secondary" onClick={() => publish("unlisted")} disabled={busy}>
                   YouTube unlisted
                 </button>
+                <button className="btn btn-primary" onClick={publishTikTok} disabled={busy}>
+                  Enviar ao TikTok (rascunho)
+                </button>
               </>
             )}
             {video.status === "scheduled" && (
-              <button className="btn btn-primary" onClick={() => publish("private")} disabled={busy}>
-                Publicar agora
+              <>
+                <button className="btn btn-primary" onClick={() => publish("private")} disabled={busy}>
+                  Publicar YouTube agora
+                </button>
+                <button className="btn btn-primary" onClick={publishTikTok} disabled={busy}>
+                  Enviar ao TikTok (rascunho)
+                </button>
+              </>
+            )}
+            {video.status === "published" && (
+              <button className="btn btn-secondary" onClick={publishTikTok} disabled={busy}>
+                Reenviar TikTok (rascunho)
               </button>
             )}
             {video.youtubeUrl && (
@@ -164,6 +194,7 @@ export default function VideoDetailPage() {
                 Abrir no YouTube
               </a>
             )}
+            {video.tiktokUrl && <span className="badge status-ready">TikTok inbox enviado</span>}
             <button className="btn btn-secondary" onClick={() => router.push("/videos")}>
               Voltar
             </button>

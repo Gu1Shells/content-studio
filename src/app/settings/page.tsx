@@ -30,6 +30,13 @@ type YtStatus = {
   channelId: string | null;
 };
 
+type TtStatus = {
+  hasClient: boolean;
+  connected: boolean;
+  openId: string | null;
+  displayName: string | null;
+};
+
 function SettingsInner() {
   const search = useSearchParams();
   const router = useRouter();
@@ -37,17 +44,19 @@ function SettingsInner() {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [connecting, setConnecting] = useState(false);
+  const [connecting, setConnecting] = useState<"yt" | "tt" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageTone, setMessageTone] = useState<"ok" | "err">("ok");
   const [yt, setYt] = useState<YtStatus | null>(null);
+  const [tt, setTt] = useState<TtStatus | null>(null);
 
   async function load() {
     setLoading(true);
     try {
-      const [settingsRes, ytRes] = await Promise.all([
+      const [settingsRes, ytRes, ttRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/youtube/status"),
+        fetch("/api/tiktok/status"),
       ]);
       const data = await settingsRes.json().catch(() => ({ groups: [] }));
       setGroups(data.groups || []);
@@ -63,10 +72,16 @@ function SettingsInner() {
       } else {
         setYt({ hasClient: false, connected: false, channelId: null });
       }
+      if (ttRes.ok) {
+        setTt(await ttRes.json());
+      } else {
+        setTt({ hasClient: false, connected: false, openId: null, displayName: null });
+      }
     } catch (e) {
       setMessageTone("err");
       setMessage(e instanceof Error ? e.message : "Falha ao carregar settings");
       setYt({ hasClient: false, connected: false, channelId: null });
+      setTt({ hasClient: false, connected: false, openId: null, displayName: null });
     } finally {
       setLoading(false);
     }
@@ -77,19 +92,33 @@ function SettingsInner() {
   }, []);
 
   useEffect(() => {
-    const ok = search.get("youtube_ok");
-    const err = search.get("youtube_error");
+    const ytOk = search.get("youtube_ok");
+    const ytErr = search.get("youtube_error");
     const channel = search.get("channel");
-    if (ok) {
+    const ttOk = search.get("tiktok_ok");
+    const ttErr = search.get("tiktok_error");
+    const account = search.get("account");
+
+    if (ytOk) {
       setMessageTone("ok");
       setMessage(`YouTube conectado${channel ? `: ${channel}` : ""}.`);
+      router.replace("/settings");
     }
-    if (err) {
+    if (ytErr) {
       setMessageTone("err");
-      // Evita mensagem gigante que “come” a tela
-      const short = err.length > 180 ? `${err.slice(0, 180)}…` : err;
+      const short = ytErr.length > 180 ? `${ytErr.slice(0, 180)}…` : ytErr;
       setMessage(`Erro na autorização YouTube: ${short}. Você pode tentar conectar de novo.`);
-      // Limpa a query para o botão/área não sumirem no refresh mental do usuário
+      router.replace("/settings");
+    }
+    if (ttOk) {
+      setMessageTone("ok");
+      setMessage(`TikTok conectado${account ? `: ${account}` : ""}.`);
+      router.replace("/settings");
+    }
+    if (ttErr) {
+      setMessageTone("err");
+      const short = ttErr.length > 180 ? `${ttErr.slice(0, 180)}…` : ttErr;
+      setMessage(`Erro na autorização TikTok: ${short}. Tente conectar de novo.`);
       router.replace("/settings");
     }
   }, [search, router]);
@@ -139,7 +168,7 @@ function SettingsInner() {
   }
 
   async function connectYoutube() {
-    setConnecting(true);
+    setConnecting("yt");
     setMessage(null);
     try {
       const values: Record<string, string> = {};
@@ -170,24 +199,75 @@ function SettingsInner() {
         return;
       }
 
-      // Redireciona para o Google
       window.location.assign("/api/youtube/connect");
     } catch (e) {
       setMessageTone("err");
       setMessage(e instanceof Error ? e.message : "Falha ao iniciar OAuth YouTube");
     } finally {
-      setConnecting(false);
+      setConnecting(null);
     }
   }
 
-  const connectButton = (
+  async function connectTikTok() {
+    setConnecting("tt");
+    setMessage(null);
+    try {
+      const values: Record<string, string> = {};
+      for (const key of ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET", "APP_URL"]) {
+        const v = (draft[key] || "").trim();
+        if (v) values[key] = v;
+      }
+      if (!values.APP_URL) {
+        values.APP_URL = window.location.origin;
+      }
+
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values }),
+      });
+
+      const statusRes = await fetch("/api/tiktok/status");
+      const status = await statusRes.json();
+      setTt(status);
+
+      if (!status.hasClient) {
+        setMessageTone("err");
+        setMessage(
+          "Preencha Client Key e Client Secret na seção TikTok abaixo e clique de novo em Conectar TikTok."
+        );
+        document.getElementById("group-tiktok")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+
+      window.location.assign("/api/tiktok/connect");
+    } catch (e) {
+      setMessageTone("err");
+      setMessage(e instanceof Error ? e.message : "Falha ao iniciar OAuth TikTok");
+    } finally {
+      setConnecting(null);
+    }
+  }
+
+  const connectYtButton = (
     <button
       type="button"
       className="btn btn-primary w-full sm:w-auto"
       onClick={connectYoutube}
-      disabled={connecting}
+      disabled={connecting !== null}
     >
-      {connecting ? "Abrindo Google..." : yt?.connected ? "Reconectar YouTube" : "Conectar YouTube"}
+      {connecting === "yt" ? "Abrindo Google..." : yt?.connected ? "Reconectar YouTube" : "Conectar YouTube"}
+    </button>
+  );
+
+  const connectTtButton = (
+    <button
+      type="button"
+      className="btn btn-primary w-full sm:w-auto"
+      onClick={connectTikTok}
+      disabled={connecting !== null}
+    >
+      {connecting === "tt" ? "Abrindo TikTok..." : tt?.connected ? "Reconectar TikTok" : "Conectar TikTok"}
     </button>
   );
 
@@ -198,7 +278,10 @@ function SettingsInner() {
         {/* Botão sempre disponível mesmo durante reload */}
         <section className="panel p-5">
           <p className="mb-3 text-sm text-[var(--muted)]">Enquanto isso, você já pode tentar conectar:</p>
-          {connectButton}
+          <div className="flex flex-wrap gap-2">
+            {connectYtButton}
+            {connectTtButton}
+          </div>
         </section>
       </div>
     );
@@ -248,14 +331,12 @@ function SettingsInner() {
               Conectar canal
             </h3>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              1) Preencha Client ID + Secret na seção YouTube. 2) No Google Cloud, ative YouTube Data
-              API v3 e adicione redirect URI:{" "}
+              Redirect URI:{" "}
               <code className="rounded bg-[#f7f3ea] px-1">
                 {typeof window !== "undefined"
                   ? `${window.location.origin}/api/youtube/callback`
-                  : "{APP_URL}/api/youtube/callback"}
+                  : "https://studio.neonux.com.br/api/youtube/callback"}
               </code>
-              . 3) Clique em conectar.
             </p>
             <p className="mt-2 text-sm">
               Status:{" "}
@@ -269,16 +350,56 @@ function SettingsInner() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {connectButton}
+            {connectYtButton}
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => {
-                setMessage(null);
-                document.getElementById("group-youtube")?.scrollIntoView({ behavior: "smooth" });
-              }}
+              onClick={() => document.getElementById("group-youtube")?.scrollIntoView({ behavior: "smooth" })}
             >
               Ir para Client ID / Secret
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="tiktok-connect" className="panel border-[var(--accent)] p-5 md:p-6">
+        <div className="space-y-4">
+          <div>
+            <div className="mb-1 text-sm font-semibold tracking-wide text-[var(--accent-2)] uppercase">
+              OAuth TikTok
+            </div>
+            <h3 className="text-lg font-semibold" style={{ fontFamily: "var(--font-display), serif" }}>
+              Conectar conta
+            </h3>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Login Kit + video.upload. Redirect URI no TikTok Developers:{" "}
+              <code className="rounded bg-[#f7f3ea] px-1">
+                {typeof window !== "undefined"
+                  ? `${window.location.origin}/api/tiktok/callback`
+                  : "https://studio.neonux.com.br/api/tiktok/callback"}
+              </code>
+            </p>
+            <p className="mt-2 text-sm">
+              Status:{" "}
+              {tt?.connected ? (
+                <span className="badge status-ready">
+                  conectado {tt.displayName || tt.openId}
+                </span>
+              ) : tt?.hasClient ? (
+                <span className="badge status-estimated">credenciais ok — falta autorizar</span>
+              ) : (
+                <span className="badge">preencha Client Key/Secret</span>
+              )}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {connectTtButton}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => document.getElementById("group-tiktok")?.scrollIntoView({ behavior: "smooth" })}
+            >
+              Ir para Client Key / Secret
             </button>
           </div>
         </div>
@@ -291,9 +412,8 @@ function SettingsInner() {
           </h3>
           <p className="mt-1 text-sm text-[var(--muted)]">{group.description}</p>
 
-          {group.id === "youtube" && (
-            <div className="mt-3">{connectButton}</div>
-          )}
+          {group.id === "youtube" && <div className="mt-3">{connectYtButton}</div>}
+          {group.id === "tiktok" && <div className="mt-3">{connectTtButton}</div>}
 
           <div className="mt-4 space-y-4">
             {group.fields.map((field) => (

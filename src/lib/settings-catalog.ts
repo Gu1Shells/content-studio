@@ -124,7 +124,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
   {
     id: "tiktok",
     title: "TikTok",
-    description: "Content Posting API (após aprovação do app TikTok).",
+    description: "Login Kit + Content Posting (rascunho). Redirect: {APP_URL}/api/tiktok/callback",
     fields: [
       {
         key: "TIKTOK_CLIENT_KEY",
@@ -141,6 +141,23 @@ export const SETTING_GROUPS: SettingGroup[] = [
         key: "TIKTOK_ACCESS_TOKEN",
         label: "Access Token",
         secret: true,
+        help: "Preenchido ao conectar",
+      },
+      {
+        key: "TIKTOK_REFRESH_TOKEN",
+        label: "Refresh Token",
+        secret: true,
+        help: "Preenchido ao conectar",
+      },
+      {
+        key: "TIKTOK_OPEN_ID",
+        label: "Open ID",
+        help: "Preenchido ao conectar",
+      },
+      {
+        key: "TIKTOK_DISPLAY_NAME",
+        label: "Display Name",
+        help: "Conta conectada",
       },
     ],
   },
@@ -152,8 +169,8 @@ export const SETTING_GROUPS: SettingGroup[] = [
       {
         key: "APP_URL",
         label: "URL do app",
-        placeholder: "http://localhost:3000",
-        help: "Obrigatório para OAuth YouTube. Redirect: {APP_URL}/api/youtube/callback",
+        placeholder: "https://studio.neonux.com.br",
+        help: "Produção: https://studio.neonux.com.br — OAuth YouTube/TikTok usam este domínio",
       },
       {
         key: "MONTHLY_BUDGET_USD",
